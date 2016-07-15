@@ -36,8 +36,6 @@
 
 @interface STKLocalFileDataSource()
 {
-    SInt64 position;
-    SInt64 length;
     AudioFileTypeID audioFileTypeHint;
 }
 @property (readwrite, copy) NSString* filePath;
@@ -45,14 +43,15 @@
 @end
 
 @implementation STKLocalFileDataSource
-@synthesize filePath;
+@synthesize position;
+@synthesize length;
 
 -(instancetype) initWithFilePath:(NSString*)filePathIn
 {
     if (self = [super init])
     {
         self.filePath = filePathIn;
-        
+
         audioFileTypeHint = [STKLocalFileDataSource audioFileTypeHintFromFileExtension:filePathIn.pathExtension];
     }
     
@@ -130,8 +129,7 @@
     stream = CFReadStreamCreateWithFile(NULL, (__bridge CFURLRef)url);
     
     NSError* fileError;
-    NSFileManager* manager = [[NSFileManager alloc] init];
-    NSDictionary* attributes = [manager attributesOfItemAtPath:filePath error:&fileError];
+    NSDictionary* attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:self.filePath error:&fileError];
 
     if (fileError)
     {
@@ -145,22 +143,12 @@
     
     if (number)
     {
-        length = number.longLongValue;
+        self.length = number.longLongValue;
     }
-    
+
     [self reregisterForEvents];
 
     CFReadStreamOpen(stream);
-}
-
--(SInt64) position
-{
-    return position;
-}
-
--(SInt64) length
-{
-    return length;
 }
 
 -(int) readIntoBuffer:(UInt8*)buffer withSize:(int)size
@@ -169,13 +157,13 @@
 
     if (retval > 0)
     {
-        position += retval;
+        self.position += retval;
     }
     else
     {
         NSNumber* property = (__bridge_transfer NSNumber*)CFReadStreamCopyProperty(stream, kCFStreamPropertyFileCurrentOffset);
         
-        position = property.longLongValue;
+        self.position = property.longLongValue;
     }
     
     return retval;
@@ -214,11 +202,11 @@
     
     if (CFReadStreamSetProperty(stream, kCFStreamPropertyFileCurrentOffset, (__bridge CFTypeRef)[NSNumber numberWithLongLong:offset]) != TRUE)
     {
-        position = 0;
+        self.position = 0;
     }
     else
     {
-        position = offset;
+        self.position = offset;
     }
     
     if (!reopened)
@@ -237,7 +225,7 @@
 
 -(NSString*) description
 {
-    return self->filePath;
+    return self.filePath;
 }
 
 @end

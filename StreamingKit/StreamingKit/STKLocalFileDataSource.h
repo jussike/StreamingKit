@@ -37,6 +37,8 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface STKLocalFileDataSource : STKCoreFoundationDataSource
+@property (nonatomic, assign) SInt64 position;
+@property (nonatomic, assign) SInt64 length;
 
 +(AudioFileTypeID) audioFileTypeHintFromFileExtension:(NSString*)fileExtension;
 @property (readonly, copy) NSString* filePath;
