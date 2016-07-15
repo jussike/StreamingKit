@@ -42,6 +42,7 @@
 #import "libkern/OSAtomic.h"
 #import <float.h>
 
+
 #ifndef DBL_MAX
 #define DBL_MAX 1.7976931348623157e+308
 #endif
@@ -1064,7 +1065,7 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
 
 -(void) seekToTime:(double)value
 {
-    if (currentlyPlayingEntry == nil)
+    if (currentlyPlayingEntry == nil || currentlyPlayingEntry.dataSource.supportsSeek == NO)
     {
         return;
     }
@@ -1171,7 +1172,11 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
     {
         return;
     }
-    
+
+    if ([entry.dataSource respondsToSelector:@selector(dispose)]) {
+        [(id)entry.dataSource dispose];
+    }
+
     LOGINFO(([NSString stringWithFormat:@"Finished: %@, Next: %@, buffering.count=%d,upcoming.count=%d", entry ? [entry description] : @"nothing", [next description], (int)bufferingQueue.count, (int)upcomingQueue.count]));
     
     NSObject* queueItemId = entry.queueItemId;
