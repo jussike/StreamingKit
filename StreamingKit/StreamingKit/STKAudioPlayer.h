@@ -134,7 +134,8 @@ typedef void(^STKFrameFilter)(UInt32 channelsPerFrame, UInt32 bytesPerFrame, UIn
 -(void) audioPlayer:(STKAudioPlayer*)audioPlayer logInfo:(NSString*)line;
 /// Raised when items queued items are cleared (usually because of a call to play, setDataSource or stop)
 -(void) audioPlayer:(STKAudioPlayer*)audioPlayer didCancelQueuedItems:(NSArray*)queuedItems;
-
+/// Raised when an hls item has X-ENDLIST and all its segments are downloaded
+-(void) audioPlayer:(STKAudioPlayer*)audioPlayer seekableQueueItemId:(NSObject*)queueItemId;
 @end
 
 @interface STKAudioPlayer : NSObject<STKDataSourceDelegate>
@@ -148,6 +149,8 @@ typedef void(^STKFrameFilter)(UInt32 channelsPerFrame, UInt32 bytesPerFrame, UIn
 @property (readonly) double duration;
 /// Gets the current item progress in seconds
 @property (readonly) double progress;
+/// Gets the current item seekable
+@property (readonly) BOOL seekable;
 /// Enables or disables peak and average decibel meteting
 @property (readwrite) BOOL meteringEnabled;
 /// Enables or disables the EQ

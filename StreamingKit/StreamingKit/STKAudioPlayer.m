@@ -1031,6 +1031,11 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
     return retval;
 }
 
+-(BOOL) seekable
+{
+    return currentlyPlayingEntry.dataSource.supportsSeek;
+}
+
 -(BOOL) invokeOnPlaybackThread:(void(^)())block
 {
 	NSRunLoop* runLoop = playbackThreadRunLoop;
@@ -1676,6 +1681,18 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
     pthread_mutex_unlock(&playerMutex);
     
     [self processRunloop];
+}
+
+-(void) dataSourceIsNowSeekable:(STKDataSource *)dataSource
+{
+    OSSpinLockLock(&currentEntryReferencesLock);
+    if (currentlyPlayingEntry.dataSource == dataSource && dataSource.supportsSeek && [self.delegate respondsToSelector:@selector(audioPlayer:seekableQueueItemId:)]) {
+        dispatch_async(dispatch_get_main_queue(), ^
+        {
+            [self.delegate audioPlayer:self seekableQueueItemId:currentlyPlayingEntry.queueItemId];
+        });
+    }
+    OSSpinLockUnlock(&currentEntryReferencesLock);
 }
 
 -(void) pause

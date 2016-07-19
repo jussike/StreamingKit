@@ -203,6 +203,11 @@
             self.appendedSegments++;
             [self.pendingSegments removeObjectForKey:@(firstPendingSegment+i)];
             i++;
+
+            if (self.supportsSeek && [self.delegate respondsToSelector:@selector(dataSourceIsNowSeekable:)]) {
+                [self.delegate dataSourceIsNowSeekable:self];
+            }
+
         } else {
             break;
         }

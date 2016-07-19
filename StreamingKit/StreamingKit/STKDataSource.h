@@ -43,6 +43,8 @@ NS_ASSUME_NONNULL_BEGIN
 -(void) dataSourceDataAvailable:(STKDataSource*)dataSource;
 -(void) dataSourceErrorOccured:(STKDataSource*)dataSource;
 -(void) dataSourceEof:(STKDataSource*)dataSource;
+@optional
+-(void) dataSourceIsNowSeekable:(STKDataSource*)dataSource;
 @end
 
 @interface STKDataSource : NSObject
