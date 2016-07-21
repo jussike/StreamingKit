@@ -43,7 +43,6 @@
         self.playlistQueue = [[NSOperationQueue alloc] init];
         self.appendedSegments = 0;
         self.fetchingStarted = NO;
-        self.canceled = NO;
 
         downloadTimer = [NSTimer timerWithTimeInterval:downloadTimerInterval
                                                 target:self
@@ -80,10 +79,8 @@
                                    NSLog(@"error %@", [error description]);
                                    return;
                                 }
-                               if (self.canceled == NO) {
-                                   NSString* playlist = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-                                   [self parsePlaylist: playlist];
-                               }
+                                NSString* playlist = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+                                [self parsePlaylist: playlist];
                            }];
     
 }
@@ -115,8 +112,9 @@
         nextRefreshDelay = 0;
     }
 
-    NSLog(@"Using next call delay: %d", nextRefreshDelay);
-    if (self.playlistReady != YES && self.canceled == NO) {
+    //NSLog(@"Using next call delay: %d", nextRefreshDelay);
+    
+    if (self.playlistReady != YES) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextRefreshDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self fetchPlaylist];
         });
@@ -151,17 +149,12 @@
 
 -(void)concatenateSegment:(NSString*)aacPath toIndex:(NSUInteger)index
 {
-    NSLog(@"Received segment %d, self %p", index, self);
+    //NSLog(@"Received segment %d, self %p", index, self);
     OSSpinLockLock(&segmentsLock);
     NSAssert(self.currentDownloads.count > 0, @"current download");
     [self.currentDownloads removeObjectForKey:@(index)];
     OSSpinLockUnlock(&segmentsLock);
 
-    
-    if (self.canceled == YES) {
-        NSLog(@"Prevented playback file corruption");
-        return;
-    }
     OSSpinLockLock(&appendLock);
 
     [self.pendingSegments setObject:aacPath forKey:@(index)];
@@ -249,22 +242,18 @@
 
 -(void) seekToOffset:(SInt64)offset
 {
-    NSAssert(self.canceled == NO, @"canceled");
-
-    if (self.fetchingStarted == NO && self.canceled == NO) {
+    if (self.fetchingStarted == NO || ![self isStreaming]) {
         [self fetchPlaylist];
     }
+    [self supportsSeek];
 
     if (self.appendedSegments > 0) {
         [super seekToOffset:offset];
         return;
     }
-    
+
     self.position = offset;
-
 }
-
-
 
 -(int) readIntoBuffer:(UInt8*)buffer withSize:(int)size
 {
@@ -333,7 +322,6 @@
     return bytesAvailable;
 }
 
-
 -(void) open
 {
     if (self.appendedSegments > 0) {
@@ -360,31 +348,24 @@
 
 -(void) eof
 {
-
-    if ([self supportsSeek] || self.canceled == YES) {
-        self.canceled = YES;
-        [self dispose];
+    if ([self supportsSeek]) {
         [super eof];
         return;
     }
 
     [self seekToOffset:self.position];
-
 }
 
--(void) dispose
+-(void) stopTimers
 {
-    NSLog(@"Dispose %p", self);
-    self.canceled = YES;
+    NSLog(@"Invalidating timer, self %p", self);
     [downloadTimer invalidate];
     downloadTimer = nil;
-    [self.downloadQueue cancelAllOperations];
-    [self.playlistQueue cancelAllOperations];
-    // Prevent ts files to call concatenateSegment
-    [self.tsFiles enumerateObjectsUsingBlock:^(STKTSFile*  tsFile, NSUInteger idx, BOOL * _Nonnull stop) {
-        [tsFile setHlsDelegate:nil];
-    }];
+}
 
+-(NSString*) description
+{
+    return self.filePath;
 }
 
 @end
