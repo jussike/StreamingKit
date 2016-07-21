@@ -1336,7 +1336,7 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
             
             self.internalState = STKAudioPlayerInternalStateWaitingForData;
             
-            [self setCurrentlyReadingEntry:entry andStartPlaying:YES];
+            [self setCurrentlyReadingEntry:entry andStartPlaying:YES clearQueue:NO];
             [self resetPcmBuffers];
         }
         else if (seekToTimeWasRequested && currentlyPlayingEntry && currentlyPlayingEntry != currentlyReadingEntry)
