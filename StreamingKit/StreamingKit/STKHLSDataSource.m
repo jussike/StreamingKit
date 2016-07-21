@@ -110,7 +110,7 @@
 
     //NSLog(@"Using next call delay: %d", nextRefreshDelay);
     
-    if (self.playlistReady != YES) {
+    if (self.playlistReady != YES && downloadTimer) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextRefreshDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self fetchPlaylist];
         });
@@ -196,7 +196,7 @@
             self.appendedSegments++;
             [self.pendingSegments removeObjectForKey:@(firstPendingSegment+i)];
             i++;
-            [self supportsSeek];
+            ([self supportsSeek]) ? [self tellDelegateIAmSeekable] : 0;
 
         } else {
             break;
@@ -229,7 +229,7 @@
     if (self.fetchingStarted == NO || ![self isStreaming]) {
         [self fetchPlaylist];
     }
-    [self supportsSeek];
+    ([self supportsSeek]) ? [self tellDelegateIAmSeekable] : 0;
 
     if (self.appendedSegments > 0) {
         [super seekToOffset:offset];
@@ -253,6 +253,7 @@
 
 -(void) maybeStartDownloads:(NSTimer*)timer
 {
+    ([self supportsSeek]) ? [self tellDelegateIAmSeekable] : 0;
 
     if ([self supportsSeek] || ![self isStreaming]) {
         [self stopTimers];
@@ -323,11 +324,6 @@
 -(BOOL) supportsSeek
 {
     if (self.playlistReady == YES && self.appendedSegments == self.segments.count) {
-        if (self.delegate && [self.delegate respondsToSelector:@selector(dataSourceIsNowSeekable:)]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.delegate dataSourceIsNowSeekable:self];
-            });
-        }
         return YES;
     } else {
         return NO;
@@ -358,6 +354,15 @@
     NSLog(@"Invalidating timer, self %p", self);
     [downloadTimer invalidate];
     downloadTimer = nil;
+}
+
+-(void) tellDelegateIAmSeekable
+{
+    if (self.delegate && [self.delegate respondsToSelector:@selector(dataSourceIsNowSeekable:)]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.delegate dataSourceIsNowSeekable:self];
+        });
+    }
 }
 
 -(NSString*) description
