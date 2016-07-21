@@ -43,12 +43,8 @@
         self.playlistQueue = [[NSOperationQueue alloc] init];
         self.appendedSegments = 0;
         self.fetchingStarted = NO;
+        downloadTimer = nil;
 
-        downloadTimer = [NSTimer timerWithTimeInterval:downloadTimerInterval
-                                                target:self
-                                              selector:@selector(maybeStartDownloads:)
-                                              userInfo:nil
-                                               repeats:YES];
     }
     return self;
 }
@@ -178,6 +174,9 @@
 {
 
     NSFileManager* fm = [NSFileManager defaultManager];
+    if (self.appendedSegments == 0 && [fm fileExistsAtPath:self.filePath]) {
+        [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
+    }
     if (![fm fileExistsAtPath:self.filePath]) {
         [fm createFileAtPath:self.filePath contents:nil attributes:nil];
     }
@@ -190,17 +189,14 @@
         NSString* aacPath = [self.pendingSegments objectForKey:@(firstPendingSegment+i)];
         if (aacPath) {
             NSLog(@"Appending segment: %u, i'm %p", firstPendingSegment+i, self);
-            NSLog(@"Append path %@", self.filePath);
+            //NSLog(@"Append path %@", self.filePath);
 
             NSData* newData = [fm contentsAtPath:aacPath];
             [fileHandle writeData:newData];
             self.appendedSegments++;
             [self.pendingSegments removeObjectForKey:@(firstPendingSegment+i)];
             i++;
-
-            if (self.supportsSeek && [self.delegate respondsToSelector:@selector(dataSourceIsNowSeekable:)]) {
-                [self.delegate dataSourceIsNowSeekable:self];
-            }
+            [self supportsSeek];
 
         } else {
             break;
@@ -217,20 +213,8 @@
     }
     OSSpinLockUnlock(&appendLock);
 
-    if ([self hasBytesAvailable]) {
-
-        if (!stream) {
-            if (self.appendedSegments > 0) {
-                [self seekToOffset:position];
-            } else {
-                [self dataAvailable];
-            }
-        } else if (eventsRunLoop) {
-                CFRunLoopPerformBlock(eventsRunLoop.getCFRunLoop, NSRunLoopCommonModes, ^{
-                    [self dataAvailable];
-                });
-                CFRunLoopWakeUp(eventsRunLoop.getCFRunLoop);
-        }
+    if ([self hasBytesAvailable] && ![self isStreaming]) {
+        [self seekToOffset:position];
     }
 }
 
@@ -264,23 +248,19 @@
         return [super readIntoBuffer:buffer withSize:size];
     }
     
-    
-    NSFileHandle *fileHandle = [NSFileHandle fileHandleForReadingAtPath:self.filePath];
-    [fileHandle seekToFileOffset:self.position];
-    NSData* data = [fileHandle readDataOfLength:size];
-    [fileHandle closeFile];
-    memcpy(buffer, data.bytes, data.length);
-    //[data getBytes:buffer length:size];
-    self.position += data.length;
-
-    return data.length;
+    return -1;
 }
 
 -(void) maybeStartDownloads:(NSTimer*)timer
 {
-    //NSLog(@"DOWNLOADS, timer %@", timer);
+
+    if ([self supportsSeek] || ![self isStreaming]) {
+        [self stopTimers];
+        return;
+    }
+
     if (!OSSpinLockTry(&segmentsLock)) {
-        NSLog(@"Segment already locked");
+        //NSLog(@"Segment already locked");
         return;
     }
     if (self.currentDownloads.count < maxConcurrentDownloads) {
@@ -328,23 +308,40 @@
         OSSpinLockLock(&streamLock);
         [super open];
         OSSpinLockUnlock(&streamLock);
-        if (downloadTimer) {
-            [eventsRunLoop addTimer:downloadTimer forMode:NSRunLoopCommonModes];
-        }
-        return;
+    }
+
+    if (!downloadTimer) {
+        downloadTimer = [NSTimer timerWithTimeInterval:downloadTimerInterval
+                                                target:self
+                                              selector:@selector(maybeStartDownloads:)
+                                              userInfo:nil
+                                               repeats:YES];
+        [[NSRunLoop mainRunLoop] addTimer:downloadTimer forMode:NSRunLoopCommonModes];
     }
 }
 
 -(BOOL) supportsSeek
 {
     if (self.playlistReady == YES && self.appendedSegments == self.segments.count) {
+        if (self.delegate && [self.delegate respondsToSelector:@selector(dataSourceIsNowSeekable:)]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.delegate dataSourceIsNowSeekable:self];
+            });
+        }
         return YES;
     } else {
         return NO;
     }
 }
 
-
+-(BOOL) isStreaming
+{
+    if (eventsRunLoop && eventsRunLoop.currentMode && stream && self.appendedSegments > 0) {
+        return YES;
+    } else {
+        return NO;
+    }
+}
 
 -(void) eof
 {
