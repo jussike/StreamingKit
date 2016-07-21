@@ -111,6 +111,7 @@
         }
         else if ([aLine rangeOfString:@"ENDLIST"].location != NSNotFound) {
             self.playlistReady = YES;
+            ([self supportsSeek]) ? [self tellDelegateIAmSeekable] : 0;
         }
     }
     if (self.segments.count == 0) {
@@ -330,6 +331,9 @@
                                                repeats:YES];
         [[NSRunLoop mainRunLoop] addTimer:downloadTimer forMode:NSRunLoopCommonModes];
     }
+
+    ([self supportsSeek]) ? [self tellDelegateIAmSeekable] : 0;
+
 }
 
 -(BOOL) supportsSeek
