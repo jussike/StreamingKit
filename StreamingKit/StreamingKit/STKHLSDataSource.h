@@ -19,7 +19,6 @@ NS_ASSUME_NONNULL_BEGIN
 -(void) concatenateSegment:(NSString*)aacPath toIndex:(NSUInteger)index;
 -(void) maybeStartDownloads:(nullable NSTimer*)timer;
 -(void) fetchPlaylist;
--(void) dispose;
 @end
 
 

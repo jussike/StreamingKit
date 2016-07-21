@@ -1178,10 +1178,6 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
         return;
     }
 
-    if ([entry.dataSource respondsToSelector:@selector(dispose)]) {
-        [(id)entry.dataSource dispose];
-    }
-
     LOGINFO(([NSString stringWithFormat:@"Finished: %@, Next: %@, buffering.count=%d,upcoming.count=%d", entry ? [entry description] : @"nothing", [next description], (int)bufferingQueue.count, (int)upcomingQueue.count]));
     
     NSObject* queueItemId = entry.queueItemId;
