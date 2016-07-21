@@ -4,8 +4,11 @@
 #import "NSString+MD5.h"
 #import "libkern/OSAtomic.h"
 
+#define tsTimeout 30
+
 @interface STKTSFile() {
     OSSpinLock lock;
+    NSUInteger retryCount;
 }
 
 @property (nonatomic, retain) NSURL* url;
@@ -21,6 +24,7 @@
     if (self = [super init])
     {
         self.readyToUse = NO;
+        retryCount = 5;
     }
     return self;
 }
@@ -32,6 +36,7 @@
     NSString* identify = [[NSString stringWithFormat:@"%@%@", hostWoDomain, self.url.query] MD5];
     NSString* aacPath = [NSString stringWithFormat:@"%@%@.aac", NSTemporaryDirectory(), identify];
     NSString* tsPath = [NSString stringWithFormat:@"%@%@", NSTemporaryDirectory(), identify];
+    __weak __typeof__(self) weakSelf = self;
 
     if ([fm isReadableFileAtPath:aacPath]) {
         
@@ -39,11 +44,11 @@
         
         dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             OSSpinLockLock(&lock);
-            [self.hlsDelegate concatenateSegment: aacPath toIndex:index];
-            self.readyToUse = YES;
+            [weakSelf.hlsDelegate concatenateSegment: aacPath toIndex:index];
+            weakSelf.readyToUse = YES;
             OSSpinLockUnlock(&lock);
 
-            [self.hlsDelegate maybeStartDownloads: nil];
+            [weakSelf.hlsDelegate maybeStartDownloads: nil];
 
         });
         
@@ -54,21 +59,29 @@
         [fm removeItemAtPath:tsPath error:nil];
         dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             OSSpinLockLock(&lock);
-            [self.hlsDelegate concatenateSegment: aacPath toIndex:index];
-            self.readyToUse = YES;
+            [weakSelf.hlsDelegate concatenateSegment: aacPath toIndex:index];
+            weakSelf.readyToUse = YES;
             OSSpinLockUnlock(&lock);
-            [self.hlsDelegate maybeStartDownloads: nil];
+            [weakSelf.hlsDelegate maybeStartDownloads: nil];
 
         });
         
     } else {
-        NSURLRequest* request = [[NSURLRequest alloc] initWithURL:self.url cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:60];
+        NSURLRequest* request = [[NSURLRequest alloc] initWithURL:weakSelf.url
+                                                      cachePolicy:NSURLRequestUseProtocolCachePolicy
+                                                  timeoutInterval:tsTimeout];
 
         [NSURLConnection sendAsynchronousRequest:request queue:queue
                                completionHandler:^(NSURLResponse *response, NSData *data, NSError *error) {
 
-                                if (error) {
+                                if (error || ((NSHTTPURLResponse *)response).statusCode != 200) {
                                     NSLog(@"error %@", [error description]);
+                                    NSLog(@"Retrying %d", retryCount);
+                                    if (retryCount--) {
+                                        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0ul), ^{
+                                            [weakSelf prepareWithIndex:index WithQueue:queue];
+                                        });
+                                    }
                                     return;
                                 }
                                                     
@@ -76,20 +89,18 @@
                                 if (dataReady == NO) {
                                     NSLog(@"Error occurred");
                                 }
-                                if (self.hlsDelegate) {
+                                if (weakSelf.hlsDelegate) {
                                                     
                                     STKTSDemuxer* t = [[STKTSDemuxer alloc] init];
                                     [t demux: tsPath]; //this writes a file to aacPath
                                     [fm removeItemAtPath:tsPath error:nil];
 
                                     OSSpinLockLock(&lock);
-                                    [self.hlsDelegate concatenateSegment: aacPath toIndex:index];
-                                    self.readyToUse = YES;
+                                    [weakSelf.hlsDelegate concatenateSegment: aacPath toIndex:index];
+                                    weakSelf.readyToUse = YES;
                                     OSSpinLockUnlock(&lock);
-                                    [self.hlsDelegate maybeStartDownloads: nil];
+                                    [weakSelf.hlsDelegate maybeStartDownloads: nil];
 
-                                } else {
-                                    NSLog(@"Dont concatenate canceled ts download %@", self.url);
                                 }
                             }];
     }

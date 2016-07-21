@@ -6,7 +6,7 @@
 
 #define defaultRefreshDelay 5
 #define defaultSegmentDelay 1
-#define playlistTimeoutInterval 60
+#define playlistTimeoutInterval 30
 #define downloadTimerInterval 2
 #define maxConcurrentDownloads 2
 
@@ -16,6 +16,7 @@
     OSSpinLock appendLock;
     OSSpinLock streamLock;
     NSTimer* downloadTimer;
+    NSUInteger retryCount;
 
 }
 
@@ -44,7 +45,7 @@
         self.appendedSegments = 0;
         self.fetchingStarted = NO;
         downloadTimer = nil;
-
+        retryCount = 1;
     }
     return self;
 }
@@ -65,18 +66,26 @@
 {
     NSLog(@"Fetching playlist");
     self.fetchingStarted = YES;
-    
+
+    __weak __typeof__(self) weakSelf = self;
+
     NSURLRequest* request = [[NSURLRequest alloc] initWithURL:self.playlistUrl cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:playlistTimeoutInterval];
     
     [NSURLConnection sendAsynchronousRequest:request queue:self.playlistQueue
                            completionHandler:^(NSURLResponse *response, NSData *data, NSError *error) {
 
-                               if (error) {
+                               if (error || ((NSHTTPURLResponse *)response).statusCode != 200) {
                                    NSLog(@"error %@", [error description]);
+                                   if (retryCount-- && self.playlistReady != YES) {
+                                       NSLog(@"Retrying %d", retryCount);
+                                       dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0ul), ^{
+                                           [weakSelf fetchPlaylist];
+                                       });
+                                   }
                                    return;
                                 }
                                 NSString* playlist = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-                                [self parsePlaylist: playlist];
+                                [weakSelf parsePlaylist: playlist];
                            }];
     
 }
@@ -110,7 +119,7 @@
 
     //NSLog(@"Using next call delay: %d", nextRefreshDelay);
     
-    if (self.playlistReady != YES && downloadTimer) {
+    if (self.playlistReady != YES) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextRefreshDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self fetchPlaylist];
         });
@@ -264,21 +273,23 @@
         //NSLog(@"Segment already locked");
         return;
     }
+    __weak __typeof__(self) weakSelf = self;
+
     if (self.currentDownloads.count < maxConcurrentDownloads) {
         [self.tsFiles enumerateObjectsUsingBlock:^(STKTSFile *tsFile, NSUInteger idx, BOOL * _Nonnull stop) {
-            if (idx < self.appendedSegments || tsFile.isLocked) {
+            if (idx < weakSelf.appendedSegments || tsFile.isLocked) {
                 return;
             }
             if (tsFile.readyToUse == NO && ![[self.currentDownloads allKeys] containsObject:@(idx)]) {
 
                 NSLog(@"Downloading segment: %lu, i'm %p", (unsigned long)idx, self);
-                [self.currentDownloads setObject:tsFile forKey:@(idx)];
+                [weakSelf.currentDownloads setObject:tsFile forKey:@(idx)];
                 OSSpinLockUnlock(&segmentsLock);
-                [tsFile prepareWithIndex:idx WithQueue:self.downloadQueue];
+                [tsFile prepareWithIndex:idx WithQueue:weakSelf.downloadQueue];
                 OSSpinLockLock(&segmentsLock);
 
             }
-            if (self.currentDownloads.count >= maxConcurrentDownloads) {
+            if (weakSelf.currentDownloads.count >= maxConcurrentDownloads) {
                 *stop = YES;
             }
         }];
