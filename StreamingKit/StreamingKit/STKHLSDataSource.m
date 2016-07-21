@@ -8,6 +8,7 @@
 #define defaultSegmentDelay 1
 #define playlistTimeoutInterval 60
 #define downloadTimerInterval 2
+#define maxConcurrentDownloads 2
 
 @interface STKHLSDataSource()
 {
@@ -133,8 +134,8 @@
                     tsFile.hlsDelegate = self;
                     [self.tsFiles addObject:tsFile];
                     [self.segments addObject:segment];
-                    if (self.currentDownloads.count < 2) {
-                        NSLog(@"downloading %d", i);
+                    if (self.currentDownloads.count < maxConcurrentDownloads) {
+                        //NSLog(@"downloading %d", i);
                         [self.currentDownloads setObject:tsFile forKey:@(i)];
                         OSSpinLockUnlock(&segmentsLock);
                         [tsFile prepareWithIndex:i WithQueue:self.downloadQueue];
@@ -293,7 +294,7 @@
         NSLog(@"Segment already locked");
         return;
     }
-    if (self.currentDownloads.count < 2) {
+    if (self.currentDownloads.count < maxConcurrentDownloads) {
         [self.tsFiles enumerateObjectsUsingBlock:^(STKTSFile *tsFile, NSUInteger idx, BOOL * _Nonnull stop) {
             if (idx < self.appendedSegments || tsFile.isLocked) {
                 return;
@@ -307,7 +308,7 @@
                 OSSpinLockLock(&segmentsLock);
 
             }
-            if (self.currentDownloads.count >= 2) {
+            if (self.currentDownloads.count >= maxConcurrentDownloads) {
                 *stop = YES;
             }
         }];
