@@ -24,6 +24,8 @@
 @property (strong) NSOperationQueue* downloadQueue;
 @property (strong) NSOperationQueue* playlistQueue;
 @property (nonatomic, assign) BOOL fetchingStarted;
+@property (nonatomic, assign) BOOL active;
+
 
 @end
 
@@ -122,7 +124,11 @@
     
     if (self.playlistReady != YES) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextRefreshDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self fetchPlaylist];
+            if (self.active) {
+                [self fetchPlaylist];
+            } else {
+                NSLog(@"Stop fetching playlist for %@", self.filePath);
+            }
         });
     }
     OSSpinLockLock(&segmentsLock);
@@ -223,7 +229,7 @@
     }
     OSSpinLockUnlock(&appendLock);
 
-    if ([self hasBytesAvailable] && ![self isStreaming]) {
+    if ([self hasBytesAvailable] && position == 0) {
         [self seekToOffset:position];
     }
 }
@@ -236,7 +242,8 @@
 
 -(void) seekToOffset:(SInt64)offset
 {
-    if (self.fetchingStarted == NO || ![self isStreaming]) {
+    if (self.fetchingStarted == NO || self.active == NO) {
+        self.active = YES;
         [self fetchPlaylist];
     }
     ([self supportsSeek]) ? [self tellDelegateIAmSeekable] : 0;
@@ -251,6 +258,7 @@
 
 -(int) readIntoBuffer:(UInt8*)buffer withSize:(int)size
 {
+    self.active = YES;
     if (self.appendedSegments > 0) {
         if (!stream) {
             [super seekToOffset:self.position];
@@ -265,7 +273,7 @@
 {
     ([self supportsSeek]) ? [self tellDelegateIAmSeekable] : 0;
 
-    if ([self supportsSeek] || ![self isStreaming]) {
+    if ([self supportsSeek] || self.active == NO) {
         [self stopTimers];
         return;
     }
@@ -315,6 +323,15 @@
     return bytesAvailable;
 }
 
+-(void) close
+{
+    // closed by STKAudioPlayer
+    if (self.delegate == nil) {
+        self.active = NO;
+    }
+    [super close];
+}
+
 -(void) open
 {
     if (self.appendedSegments > 0) {
@@ -345,15 +362,6 @@
     }
 }
 
--(BOOL) isStreaming
-{
-    if (eventsRunLoop && eventsRunLoop.currentMode && stream && self.appendedSegments > 0) {
-        return YES;
-    } else {
-        return NO;
-    }
-}
-
 -(void) eof
 {
     if ([self supportsSeek]) {
@@ -374,8 +382,9 @@
 -(void) tellDelegateIAmSeekable
 {
     if (self.delegate && [self.delegate respondsToSelector:@selector(dataSourceIsNowSeekable:)]) {
+        __weak __typeof__(self) weakSelf = self;
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self.delegate dataSourceIsNowSeekable:self];
+            [weakSelf.delegate dataSourceIsNowSeekable:self];
         });
     }
 }
