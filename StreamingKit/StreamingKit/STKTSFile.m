@@ -3,6 +3,7 @@
 #import "STKTSDemuxer.h"
 #import "NSString+MD5.h"
 #import "libkern/OSAtomic.h"
+#import "NSFileManager+STKAudioPlayer.h"
 
 #define tsTimeout 30
 
@@ -100,7 +101,13 @@
                                     weakSelf.readyToUse = YES;
                                     OSSpinLockUnlock(&lock);
                                     [weakSelf.hlsDelegate maybeStartDownloads: nil];
+                                }
 
+                                if (dataReady == YES) {
+                                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0ul), ^{
+                                        // Limit old files in tmp directory
+                                        [NSFileManager cleanAacTmpDir:50 keepMax:5000];
+                                    });
                                 }
                             }];
     }

@@ -328,6 +328,7 @@
     // closed by STKAudioPlayer
     if (self.delegate == nil) {
         self.active = NO;
+        [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
     }
     [super close];
 }
