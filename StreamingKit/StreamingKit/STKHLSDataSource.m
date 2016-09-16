@@ -139,8 +139,7 @@
                 NSString* segment = [newSegments objectAtIndex:i];
                 if (![self.segments containsObject:segment]) {
                     NSURL *fileURL = [NSURL URLWithString:segment];
-
-                    STKTSFile* tsFile = [[STKTSFile alloc] initWithUrl:fileURL];
+                    STKTSFile* tsFile = [self allocateTSFileWithUrl:fileURL];
                     tsFile.hlsDelegate = self;
                     [self.tsFiles addObject:tsFile];
                     [self.segments addObject:segment];
@@ -157,6 +156,12 @@
     }
     OSSpinLockUnlock(&segmentsLock);
 
+}
+
+/* You should override this */
+-(id) allocateTSFileWithUrl: (NSURL*)fileURL
+{
+    return [[STKTSFile alloc] initWithUrl:fileURL];
 }
 
 -(void)concatenateSegment:(NSString*)aacPath toIndex:(NSUInteger)index

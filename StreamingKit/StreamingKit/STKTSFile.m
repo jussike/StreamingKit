@@ -11,9 +11,6 @@
     OSSpinLock lock;
     NSUInteger retryCount;
 }
-
-@property (nonatomic, retain) NSURL* url;
-
 @end
 
 @implementation STKTSFile
@@ -30,13 +27,19 @@
     return self;
 }
 
+/* You should override this for suitable for your api */
+-(NSString*) identifierByURL
+{
+    NSLog(@"You should override this method");
+    return [self.url.absoluteString MD5];
+}
+
 -(void) prepareWithIndex:(NSUInteger)index WithQueue:(NSOperationQueue*)queue
 {
     NSFileManager* fm = [NSFileManager defaultManager];
-    NSString* hostWoDomain = [[self.url.host componentsSeparatedByString:@"."] firstObject];
-    NSString* identify = [[NSString stringWithFormat:@"%@%@", hostWoDomain, self.url.query] MD5];
-    NSString* aacPath = [NSString stringWithFormat:@"%@%@.aac", NSTemporaryDirectory(), identify];
-    NSString* tsPath = [NSString stringWithFormat:@"%@%@", NSTemporaryDirectory(), identify];
+    NSString* identifier = [self identifierByURL];
+    NSString* aacPath = [NSString stringWithFormat:@"%@%@.aac", NSTemporaryDirectory(), identifier];
+    NSString* tsPath = [NSString stringWithFormat:@"%@%@", NSTemporaryDirectory(), identifier];
     __weak __typeof__(self) weakSelf = self;
 
     if ([fm isReadableFileAtPath:aacPath]) {

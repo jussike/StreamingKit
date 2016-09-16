@@ -4,8 +4,9 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface STKTSFile : NSObject
-@property (readwrite, weak) STKHLSDataSource* hlsDelegate;
+@property (readwrite, weak) id hlsDelegate;
 @property (nonatomic, assign, getter=isReadyToUse) BOOL readyToUse;
+@property (nonatomic, retain) NSURL* url;
 
 -(instancetype) initWithUrl:(NSURL*)url;
 -(void) prepareWithIndex:(NSUInteger)index WithQueue:(NSOperationQueue*)queue;
