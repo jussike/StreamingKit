@@ -7,6 +7,8 @@
 
 #define tsTimeout 30
 
+BOOL purgingCache;
+
 @interface STKTSFile() {
     OSSpinLock lock;
     NSUInteger retryCount;
@@ -107,10 +109,14 @@
                                 }
 
                                 if (dataReady == YES) {
-                                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0ul), ^{
-                                        // Limit old files in tmp directory
-                                        [NSFileManager cleanAacTmpDir:50 keepMax:5000];
-                                    });
+                                    if (!purgingCache) {
+                                        purgingCache = YES;
+                                        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0ul), ^{
+                                            // Limit old files in tmp directory
+                                            [NSFileManager cleanAacTmpDir:100 keepMax:4000];
+                                            purgingCache = NO;
+                                        });
+                                    }
                                 }
                             }];
     }

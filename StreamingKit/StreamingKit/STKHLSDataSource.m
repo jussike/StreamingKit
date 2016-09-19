@@ -119,13 +119,13 @@
     if (self.segments.count == 0) {
         nextRefreshDelay = 0;
     }
-
-    //NSLog(@"Using next call delay: %d", nextRefreshDelay);
     
     if (self.playlistReady != YES) {
+        __weak __typeof__(self) weakSelf = self;
+
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextRefreshDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if (self.active) {
-                [self fetchPlaylist];
+                [weakSelf fetchPlaylist];
             } else {
                 NSLog(@"Stop fetching playlist for %@", self.filePath);
             }
@@ -144,7 +144,6 @@
                     [self.tsFiles addObject:tsFile];
                     [self.segments addObject:segment];
                     if (self.currentDownloads.count < maxConcurrentDownloads) {
-                        //NSLog(@"downloading %d", i);
                         [self.currentDownloads setObject:tsFile forKey:@(i)];
                         OSSpinLockUnlock(&segmentsLock);
                         [tsFile prepareWithIndex:i WithQueue:self.downloadQueue];
@@ -166,7 +165,6 @@
 
 -(void)concatenateSegment:(NSString*)aacPath toIndex:(NSUInteger)index
 {
-    //NSLog(@"Received segment %d, self %p", index, self);
     OSSpinLockLock(&segmentsLock);
     NSAssert(self.currentDownloads.count > 0, @"current download");
     [self.currentDownloads removeObjectForKey:@(index)];
@@ -175,7 +173,6 @@
     OSSpinLockLock(&appendLock);
 
     [self.pendingSegments setObject:aacPath forKey:@(index)];
-    //NSLog(@"Added segment %d to pending", index);
 
     NSUInteger firstPendingSegment = [self.pendingSegments firstNSNumberKeyByAscendingOrder].unsignedIntegerValue;
     
@@ -210,7 +207,6 @@
         NSString* aacPath = [self.pendingSegments objectForKey:@(firstPendingSegment+i)];
         if (aacPath) {
             NSLog(@"Appending segment: %u, i'm %p", firstPendingSegment+i, self);
-            //NSLog(@"Append path %@", self.filePath);
 
             NSData* newData = [fm contentsAtPath:aacPath];
             [fileHandle writeData:newData];
@@ -284,7 +280,6 @@
     }
 
     if (!OSSpinLockTry(&segmentsLock)) {
-        //NSLog(@"Segment already locked");
         return;
     }
     __weak __typeof__(self) weakSelf = self;
@@ -333,9 +328,13 @@
     // closed by STKAudioPlayer
     if (self.delegate == nil) {
         self.active = NO;
-        [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
     }
     [super close];
+}
+
+-(void)dealloc
+{
+    [[NSFileManager defaultManager] removeItemAtPath:self.filePath error:nil];
 }
 
 -(void) open

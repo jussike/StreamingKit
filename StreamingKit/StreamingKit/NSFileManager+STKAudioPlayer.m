@@ -25,7 +25,8 @@
                                                                                     error:nil];
 
     __block NSMutableArray* files = [[NSMutableArray alloc] initWithCapacity:count];
-    __block NSDate* someTimeAgo = [NSDate dateWithTimeIntervalSinceNow:-60*60*24*14];
+    // Keep all younger files than 7 days old
+    __block NSDate* someTimeAgo = [NSDate dateWithTimeIntervalSinceNow:-60*60*24*7];
 
     [directoryContent enumerateObjectsUsingBlock:^(NSString*  _Nonnull file, NSUInteger idx, BOOL * _Nonnull stop) {
         if (![[file pathExtension] isEqualToString:@"aac"]) {
@@ -68,9 +69,10 @@
 +(void)cleanAacTmpDir:(NSUInteger)items keepMax:(NSUInteger)keep
 {
     NSUInteger files = [[self class] aacFilesOfFolder:NSTemporaryDirectory()];
-    // 5000 is approx 100 pop songs / 500MiB
+    // 4000 is approx 500MiB
     if (files > keep) {
         NSArray* filesToRemove = [[self class]oldFilesInDirectory:NSTemporaryDirectory() count:items];
+        NSLog(@"Removing %d old items, %d aac files on temp", filesToRemove.count, files);
         [filesToRemove enumerateObjectsUsingBlock:^(NSString*  _Nonnull filepath, NSUInteger idx, BOOL * _Nonnull stop) {
             NSError* error;
             [[NSFileManager defaultManager] removeItemAtPath:filepath error:&error];
